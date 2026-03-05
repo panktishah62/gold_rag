@@ -42,12 +42,27 @@ def generate_answer(
         context_parts.append("Retrieved Knowledge:\n" + "\n\n".join(retrieved_docs))
 
     if gold_rate is not None:
-        context_parts.append(f"Live Gold Rate (per gram): {gold_rate}")
+        context_parts.append(
+            f"Today's 24K gold price is {gold_rate} INR per gram.\n"
+            "If the question requires historical or comparative information "
+            "that is not explicitly provided, you may estimate it using "
+            "general knowledge of gold market trends."
+        )
 
     if context_parts:
         context = "\n\n".join(context_parts)
     else:
         context = "No relevant documents were retrieved for this question."
+
+    print("context:", context)
+
+    print("question:", question)
+
+    print("gold_rate:", gold_rate)
+
+    print("retrieved_docs:", retrieved_docs)
+
+    print("context_parts:", context_parts)
 
 
     system_prompt = (
@@ -58,21 +73,28 @@ def generate_answer(
         "2. Live gold_rate (if provided)\n"
         "3. Your general knowledge\n\n"
 
+        "If historical or comparative information is requested and exact data is not available, "
+        "provide a reasonable estimate based on general knowledge of gold market trends.\n"
+        "Do not claim that you lack access to historical data unless the question requires an exact verified number.\n\n"
+
         "Rules:\n"
         "- If relevant context is provided, prefer using it.\n"
         "- If context is irrelevant or missing, answer using your general knowledge.\n"
         "- Never refuse to answer solely because context is missing.\n\n"
+        "-For time-based queries like last year, last month, etc., use reasonable approximations if exact historical data is unavailable.\n\n"
+        "-If a comparison or historical calculation requires data that is not provided (e.g., gold price last year), estimate reasonable values using general market knowledge and trends instead of refusing to answer.\n\n"
 
         "If a live gold_rate is provided, it represents the 24K gold price per gram.\n\n"
 
+        
         "Gold purity conversions:\n"
-        "22K = gold_rate × 0.916\n"
-        "18K = gold_rate × 0.75\n"
-        "14K = gold_rate × 0.585\n\n"
+        "22K = gold_rate * 0.916\n"
+        "18K = gold_rate * 0.75\n"
+        "14K = gold_rate * 0.585\n\n"
 
         "Jewelry price formula:\n"
-        "Base Gold Value = weight × purity_adjusted_rate\n"
-        "Making Charges = Base Gold Value × making_charge_percentage\n"
+        "Base Gold Value = weight * purity_adjusted_rate\n"
+        "Making Charges = Base Gold Value * making_charge_percentage\n"
         "Final Price = Base Gold Value + Making Charges\n\n"
 
         "Return the answer strictly in JSON format:\n"

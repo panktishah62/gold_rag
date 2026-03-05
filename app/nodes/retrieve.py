@@ -2,49 +2,28 @@ from typing import Any, List
 
 from ..state import GoldAgentState
 
-
-SIMILARITY_THRESHOLD = 0.5   # lower = more strict filtering
-TOP_K = 4
-
-
 def retrieve_node(state: GoldAgentState, retriever: Any) -> GoldAgentState:
-    """
-    LangGraph node that:
-    - retrieves documents with similarity scores
-    - filters out irrelevant documents
-    - stores relevant page_content into state["retrieved_docs"]
-    """
 
     question = state.get("question", "")
 
-    relevant_docs: List[str] = []
+    if hasattr(retriever, "invoke"):
+        docs = retriever.invoke(question)
+    elif hasattr(retriever, "get_relevant_documents"):
+        docs = retriever.get_relevant_documents(question)
+    else:
+        docs = retriever._get_relevant_documents(question)
 
-    try:
-        # Access underlying vectorstore if available (Chroma)
-        vectorstore = getattr(retriever, "vectorstore", None)
+    top_docs = list(docs)[:4]
 
-        if vectorstore and hasattr(vectorstore, "similarity_search_with_score"):
-            docs_with_scores = vectorstore.similarity_search_with_score(question, k=TOP_K)
+    # Extract text
+    retrieved = [doc.page_content for doc in top_docs]
 
-            for doc, score in docs_with_scores:
-                # Chroma returns distance (lower = more similar)
-                if score < SIMILARITY_THRESHOLD:
-                    relevant_docs.append(doc.page_content)
+    # 🔑 IMPORTANT FIX
+    if len(" ".join(retrieved)) < 80:
+        retrieved = []
 
-        else:
-            # fallback to normal retriever
-            docs = retriever.invoke(question) if hasattr(retriever, "invoke") else retriever.get_relevant_documents(question)
+    state["retrieved_docs"] = retrieved
 
-            relevant_docs = [doc.page_content for doc in docs[:TOP_K]]
-
-    except Exception as e:
-        print("Retrieval error:", e)
-        relevant_docs = []
-
-    # store results in state
-    state["retrieved_docs"] = relevant_docs
-    state["no_docs"] = len(relevant_docs) == 0
-
-    print("retrieved_docs:", relevant_docs)
+    print("retrieved_docs:", retrieved)
 
     return state
