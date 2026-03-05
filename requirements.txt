@@ -3,6 +3,7 @@ uvicorn
 langgraph
 langchain
 langchain-community
+langchain-openai
 langchain-chroma
 langchain-huggingface
 chromadb
