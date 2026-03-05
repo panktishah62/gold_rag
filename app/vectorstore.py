@@ -11,7 +11,7 @@ from langchain_community.document_loaders import (
     DirectoryLoader,
     TextLoader,
 )
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 
@@ -32,7 +32,7 @@ def _get_embeddings() -> Any:
         return OpenAIEmbeddings()
 
     if provider == "huggingface":
-        from langchain_community.embeddings import HuggingFaceEmbeddings
+        from langchain_huggingface import HuggingFaceEmbeddings
 
         model_name = os.getenv(
             "HF_EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2"

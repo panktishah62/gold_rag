@@ -35,23 +35,7 @@ def generate_answer(
     retrieved_docs: List[str],
     gold_rate: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """
-    Generate an answer using:
-    - Retrieved RAG documents (if any)
-    - Live gold_rate (if provided)
 
-    Returns strict JSON:
-    { "answer": str, "confidence": float }
-    """
-
-    # If absolutely no context at all, refuse
-    if not retrieved_docs and gold_rate is None:
-        return {
-            "answer": "I do not have enough context to answer this question reliably.",
-            "confidence": 0.0,
-        }
-
-    # Build context block dynamically
     context_parts = []
 
     if retrieved_docs:
@@ -60,23 +44,43 @@ def generate_answer(
     if gold_rate is not None:
         context_parts.append(f"Live Gold Rate (per gram): {gold_rate}")
 
-    context = "\n\n".join(context_parts)
+    if context_parts:
+        context = "\n\n".join(context_parts)
+    else:
+        context = "No relevant documents were retrieved for this question."
+
 
     system_prompt = (
-        "You are a gold market assistant.\n"
-        "You must answer strictly using ONLY the provided context.\n"
-        "If live gold rate is provided, treat it as factual numeric data.\n"
-        "If retrieved knowledge is provided, use it for rules and formulas.\n\n"
-        "You must respond in strict JSON format:\n"
+        "You are a gold market assistant.\n\n"
+
+        "You may use three sources of information:\n"
+        "1. Retrieved context (if relevant)\n"
+        "2. Live gold_rate (if provided)\n"
+        "3. Your general knowledge\n\n"
+
+        "Rules:\n"
+        "- If relevant context is provided, prefer using it.\n"
+        "- If context is irrelevant or missing, answer using your general knowledge.\n"
+        "- Never refuse to answer solely because context is missing.\n\n"
+
+        "If a live gold_rate is provided, it represents the 24K gold price per gram.\n\n"
+
+        "Gold purity conversions:\n"
+        "22K = gold_rate × 0.916\n"
+        "18K = gold_rate × 0.75\n"
+        "14K = gold_rate × 0.585\n\n"
+
+        "Jewelry price formula:\n"
+        "Base Gold Value = weight × purity_adjusted_rate\n"
+        "Making Charges = Base Gold Value × making_charge_percentage\n"
+        "Final Price = Base Gold Value + Making Charges\n\n"
+
+        "Return the answer strictly in JSON format:\n"
         '{ "answer": string, "confidence": number between 0 and 1 }\n'
         "Do not include any text outside the JSON."
     )
 
-    user_prompt = (
-        f"Context:\n{context}\n\n"
-        f"Question:\n{question}\n\n"
-        "Return only JSON."
-    )
+    user_prompt = f"Context:\n{context}\n\nQuestion:\n{question}\n\nReturn only JSON."
 
     model = genai.GenerativeModel(
         GEMINI_MODEL_NAME,
@@ -87,16 +91,9 @@ def generate_answer(
         response = model.generate_content(user_prompt)
         content = (response.text or "").strip()
     except Exception:
-        print(f"Gemini generate_answer() failed (model={GEMINI_MODEL_NAME!r}):")
         traceback.print_exc()
-
-        # Fallback
-        fallback_context = context[:1500]
         return {
-            "answer": (
-                "LLM is unavailable right now. Available context:\n\n"
-                f"{fallback_context}"
-            ),
+            "answer": "LLM failed to generate a response.",
             "confidence": 0.2,
         }
 
@@ -110,63 +107,3 @@ def generate_answer(
         confidence = 0.0
 
     return {"answer": answer, "confidence": confidence}
-    """
-    Use a Gemini chat model to generate an answer and a confidence score
-    between 0 and 1, returned as structured JSON.
-    """
-    # If there is no supporting context, refuse to answer.
-    if not retrieved_docs:
-        return {
-            "answer": "I do not have enough context to answer this question reliably.",
-            "confidence": 0.0,
-        }
-
-    context = "\n\n".join(retrieved_docs)
-
-    system_prompt = (
-        "You are a question-answering system over provided context.\n"
-        "You must respond in strict JSON with two fields:\n"
-        '{ \"answer\": string, \"confidence\": number between 0 and 1 }.\n'
-        "Base confidence on how strongly the context supports the answer."
-    )
-
-    user_prompt = (
-        f"Context:\n{context}\n\n"
-        f"Live gold_rate (may be null): {gold_rate}\n\n"
-        f"Question:\n{question}\n\n"
-        "Return only JSON, no extra text."
-    )
-
-    model = genai.GenerativeModel(
-        GEMINI_MODEL_NAME,
-        system_instruction=system_prompt,
-    )
-
-    try:
-        response = model.generate_content(user_prompt)
-        content = (response.text or "").strip()
-    except Exception:
-        # If the LLM call fails, return an extractive fallback.
-        print(f"Gemini generate_answer() failed (model={GEMINI_MODEL_NAME!r}):")
-        traceback.print_exc()
-        excerpt = "\n\n---\n\n".join(retrieved_docs)[:1500]
-        return {
-            "answer": (
-                "LLM is unavailable right now. Here are the top retrieved excerpts:\n\n"
-                f"{excerpt}"
-            ),
-            "confidence": 0.2,
-        }
-
-    try:
-        parsed = json.loads(_extract_json(content))
-        answer = str(parsed.get("answer", ""))
-        confidence = float(parsed.get("confidence", 0.0))
-        confidence = max(0.0, min(1.0, confidence))
-    except Exception:
-        answer = content or "Unable to generate structured answer."
-        confidence = 0.0
-
-    return {"answer": answer, "confidence": confidence}
-
-

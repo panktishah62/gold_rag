@@ -3,37 +3,48 @@ from typing import Any, List
 from ..state import GoldAgentState
 
 
+SIMILARITY_THRESHOLD = 0.5   # lower = more strict filtering
+TOP_K = 4
+
+
 def retrieve_node(state: GoldAgentState, retriever: Any) -> GoldAgentState:
     """
     LangGraph node that:
-    - takes GoldAgentState
-    - uses a retriever to fetch top 4 relevant docs
-    - stores page_content into state["retrieved_docs"]
-    - returns the updated state
+    - retrieves documents with similarity scores
+    - filters out irrelevant documents
+    - stores relevant page_content into state["retrieved_docs"]
     """
+
     question = state.get("question", "")
-    # LangChain retriever API changed over time.
-    # Prefer `.invoke(query)`; fall back to legacy methods if needed.
-    if hasattr(retriever, "invoke"):
-        docs = retriever.invoke(question)
-    elif hasattr(retriever, "get_relevant_documents"):
-        docs = retriever.get_relevant_documents(question)
-    else:
-        docs = retriever._get_relevant_documents(question)  # type: ignore[attr-defined]
 
-    if not docs:
-        # No documents found: mark flag so the graph can skip tools
-        state["retrieved_docs"] = []
-        state["no_docs"] = True
-        return state
+    relevant_docs: List[str] = []
 
-    top_docs = list(docs)[:4]
-    state["retrieved_docs"] = [doc.page_content for doc in top_docs]
-    state["no_docs"] = False
+    try:
+        # Access underlying vectorstore if available (Chroma)
+        vectorstore = getattr(retriever, "vectorstore", None)
 
-    # Debug: print retrieved docs during testing
-    print("retrieved_docs:", state["retrieved_docs"])
+        if vectorstore and hasattr(vectorstore, "similarity_search_with_score"):
+            docs_with_scores = vectorstore.similarity_search_with_score(question, k=TOP_K)
+
+            for doc, score in docs_with_scores:
+                # Chroma returns distance (lower = more similar)
+                if score < SIMILARITY_THRESHOLD:
+                    relevant_docs.append(doc.page_content)
+
+        else:
+            # fallback to normal retriever
+            docs = retriever.invoke(question) if hasattr(retriever, "invoke") else retriever.get_relevant_documents(question)
+
+            relevant_docs = [doc.page_content for doc in docs[:TOP_K]]
+
+    except Exception as e:
+        print("Retrieval error:", e)
+        relevant_docs = []
+
+    # store results in state
+    state["retrieved_docs"] = relevant_docs
+    state["no_docs"] = len(relevant_docs) == 0
+
+    print("retrieved_docs:", relevant_docs)
 
     return state
-
-
