@@ -49,20 +49,7 @@ def generate_answer(
             "general knowledge of gold market trends."
         )
 
-    if context_parts:
-        context = "\n\n".join(context_parts)
-    else:
-        context = "No relevant documents were retrieved for this question."
-
-    print("context:", context)
-
-    print("question:", question)
-
-    print("gold_rate:", gold_rate)
-
-    print("retrieved_docs:", retrieved_docs)
-
-    print("context_parts:", context_parts)
+    context = "\n\n".join(context_parts).strip()
 
 
     system_prompt = (
@@ -81,6 +68,7 @@ def generate_answer(
         "- If relevant context is provided, prefer using it.\n"
         "- If context is irrelevant or missing, answer using your general knowledge.\n"
         "- Never refuse to answer solely because context is missing.\n\n"
+        "- Do not mention retrieval, RAG, or whether context was provided.\n\n"
         "-For time-based queries like last year, last month, etc., use reasonable approximations if exact historical data is unavailable.\n\n"
         "-If a comparison or historical calculation requires data that is not provided (e.g., gold price last year), estimate reasonable values using general market knowledge and trends instead of refusing to answer.\n\n"
 

@@ -15,7 +15,6 @@ def tool_node(state: GoldAgentState) -> GoldAgentState:
     """Fetch live gold rate."""
     rate = get_live_gold_rate()
     state["gold_rate"] = rate
-    print("Tool executed. Gold rate:", rate)
     return state
 
 
@@ -25,19 +24,11 @@ def answer_node(state: GoldAgentState) -> GoldAgentState:
     retrieved_docs = cast(list[str], state.get("retrieved_docs", [])) or []
     gold_rate = state.get("gold_rate")
 
-    if len(retrieved_docs) == 0:
-        print("No useful RAG context → using general LLM knowledge")
-
-    print("retrieved_docs_count:", len(retrieved_docs))
-
     result = generate_answer(
         question=question,
         retrieved_docs=retrieved_docs,
         gold_rate=gold_rate,
     )
-
-    print("Question:", question)
-    print("needs_live_rate:", state.get("needs_live_rate"))
 
     state["answer"] = result.get("answer")
 
@@ -52,8 +43,6 @@ def answer_node(state: GoldAgentState) -> GoldAgentState:
 def route_from_decision(state: GoldAgentState) -> str:
     """Route based on live rate need."""
     needs_live = bool(state.get("needs_live_rate"))
-    print("Routing decision:", needs_live)
-
     return "tool_branch" if needs_live else "retrieve_branch"
 
 
@@ -70,10 +59,11 @@ def build_graph() -> Any:
     graph.add_node("tool_node", tool_node)
     graph.add_node("answer_node", answer_node)
 
-    # ENTRY STARTS AT DECISION
+    # Entry starts at decision (does it need live rate?)
     graph.set_entry_point("decision_node")
 
-    # Decision routing
+    # If live rate is needed, fetch it first; then retrieve docs; then answer.
+    # Otherwise, retrieve docs; then answer.
     graph.add_conditional_edges(
         "decision_node",
         route_from_decision,
@@ -83,10 +73,7 @@ def build_graph() -> Any:
         },
     )
 
-    # Tool → Answer
-    graph.add_edge("tool_node", "answer_node")
-
-    # Retrieve → Answer
+    graph.add_edge("tool_node", "retrieve_node")
     graph.add_edge("retrieve_node", "answer_node")
 
     graph.set_finish_point("answer_node")

@@ -52,6 +52,8 @@ def setup_vectorstore(rebuild: bool = False):
     """
     persist_dir = Path("./data/chroma")
     embeddings = _get_embeddings()
+    k = int(os.getenv("RAG_TOP_K", "4"))
+    score_threshold = float(os.getenv("RAG_SCORE_THRESHOLD", "0.2"))
 
     # Fast path: load existing persisted DB (prevents re-embedding on every run)
     if persist_dir.exists() and not rebuild:
@@ -59,7 +61,13 @@ def setup_vectorstore(rebuild: bool = False):
             persist_directory=str(persist_dir),
             embedding_function=embeddings,
         )
-        return vectorstore.as_retriever(search_kwargs={"k": 4})
+        try:
+            return vectorstore.as_retriever(
+                search_type="similarity_score_threshold",
+                search_kwargs={"k": k, "score_threshold": score_threshold},
+            )
+        except Exception:
+            return vectorstore.as_retriever(search_kwargs={"k": k})
 
     # 1. Load all documents from ./data (PDFs + .md)
     pdf_loader = PyPDFDirectoryLoader("./data")
@@ -81,5 +89,11 @@ def setup_vectorstore(rebuild: bool = False):
     )
 
     # 4. Return a retriever interface
-    return vectorstore.as_retriever(search_kwargs={"k": 4})
+    try:
+        return vectorstore.as_retriever(
+            search_type="similarity_score_threshold",
+            search_kwargs={"k": k, "score_threshold": score_threshold},
+        )
+    except Exception:
+        return vectorstore.as_retriever(search_kwargs={"k": k})
 

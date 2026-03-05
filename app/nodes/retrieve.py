@@ -16,14 +16,6 @@ def retrieve_node(state: GoldAgentState, retriever: Any) -> GoldAgentState:
     top_docs = list(docs)[:4]
 
     # Extract text
-    retrieved = [doc.page_content for doc in top_docs]
-
-    # 🔑 IMPORTANT FIX
-    if len(" ".join(retrieved)) < 80:
-        retrieved = []
-
-    state["retrieved_docs"] = retrieved
-
-    print("retrieved_docs:", retrieved)
+    state["retrieved_docs"] = [doc.page_content for doc in top_docs]
 
     return state
